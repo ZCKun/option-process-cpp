@@ -4,15 +4,31 @@
 #include <fmt/format.h> // fmt FMT_STRING
 #include <utility>
 #include <thread>
-#include "cppkafka/cppkafka.h"
+#include <execinfo.h>
+#include <csignal>
+#include <execution>
 #include "process.h"
-#include "data_struct.h"
 #include "simdjson.h"
 
 using namespace op;
 
+void handler(int sig)
+{
+    void *array[10];
+    size_t size;
+
+    // get void*'s for all entries on the stack
+    size = backtrace(array, 10);
+
+    // print out all the frames to stderr
+    fprintf(stderr, "Error: signal %d:\n", sig);
+    backtrace_symbols_fd(array, size, STDERR_FILENO);
+    exit(1);
+}
+
 int main()
 {
+    signal(SIGSEGV, handler);
     auto start = std::chrono::duration_cast<std::chrono::microseconds>(
             std::chrono::system_clock::now().time_since_epoch()).count();
 
@@ -57,36 +73,22 @@ int main()
             "20201218", "20201221", "20201222", "20201223", "20201224", "20201225", "20201228", "20201229", "20201230",
             "20201231"
     };
-
-    cppkafka::Configuration config{
-            {"metadata.broker.list", "192.168.0.66:9092"}
-    };
-
-    auto producer = std::make_shared<cppkafka::Producer>(config);
-
     std::vector<std::thread> ts{};
 
     for (const auto &month: month_vec) {
-
-        auto t = std::thread([&] {
-            auto fp = fmt::format("/home/x2h1z/CLionProjects/option-process/data/{}/510050.csv", month);
-            Process process{
-                    fp,
-                    year,
-                    month,
-                    option_chain_ele,
-                    producer
-            };
-            process.process();
-        });
-        ts.push_back(std::move(t));
+        auto fp = fmt::format("/home/x2h1z/CLionProjects/option-process/data/{}/510050.csv", month);
+        Process process{
+                fp,
+                year,
+                month,
+                option_chain_ele,
+        };
+        process.start();
     }
 
     for (auto &t: ts) {
         t.join();
     }
-
-    producer->flush();
 
     auto end = std::chrono::duration_cast<std::chrono::microseconds>(
             std::chrono::system_clock::now().time_since_epoch()).count();

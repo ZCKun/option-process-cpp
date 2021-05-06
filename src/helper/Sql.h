@@ -6,6 +6,7 @@
 #define OPTION_PROCESS_SQL_H
 
 #include <mutex>
+#include "fmt/format.h"
 #include "mysql-cppconn-8/mysqlx/xdevapi.h"
 
 class Sql
@@ -30,10 +31,6 @@ public:
     mysqlx::Session &get_session()
     {
         return session_;
-    }
-
-    void settings(const std::string& settings)
-    {
     }
 
     /**

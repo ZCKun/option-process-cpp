@@ -1,8 +1,0 @@
-[requires]
-gtest/1.10.0
-simdjson/0.9.2
-librdkafka/1.6.0
-
-[generators]
-cmake_find_package
-cmake_paths

@@ -3,14 +3,14 @@
 //
 
 #include <iostream>
+#include <thread>
 #include <iv.h>
-#include "cppkafka/cppkafka.h"
 #include "process.h"
 
 inline double
 m_round(double value)
 {
-    return std::round(value * 10000) / 10000;
+    return std::round(value * 10000.0) / 10000.0;
 }
 
 std::vector<std::string_view>
@@ -103,16 +103,15 @@ get_date_time(const rapidcsv::Document &doc, int idx, bool has_ms)
     return date_time_indexes;
 }
 
-void fetch_option_quote(const std::string &year, const std::string &month,
-                        const std::vector<OptionChain> &option_chains,
-                        std::map<std::string,
-                                ska::flat_hash_map<int, OptionKlineItem>> &option_quote)
+void Process::fetch_option_quote(const std::vector<OptionChain> &option_chains,
+                                 std::map<std::string,
+                                         ska::flat_hash_map<int, OptionKlineItem>> &option_quote)
 {
     for (const auto &option_chain : option_chains) {
         const auto &code = option_chain.option_code;
 
         auto sql = fmt::format("select * from option_kline_{}.`{}` where date = '{}';",
-                               year, code, month);
+                               year_, code, date_);
         auto result = Sql::instance().execute_sql_command(sql);
         auto row = result.fetchAll();
 
@@ -145,39 +144,48 @@ void fetch_option_quote(const std::string &year, const std::string &month,
 }
 
 Process::Process(const std::string &stock_quote_path, const std::string &year, const std::string &date,
-                 const simdjson::dom::element &option_chain_ele,
-                 const std::shared_ptr<cppkafka::Producer> &producer_ptr)
+                 const simdjson::dom::element &option_chain_ele)
         : stock_quote_fp_(stock_quote_path),
           year_(year),
-          date_(date),
-          producer_ptr_(producer_ptr)
+          date_(date)
 {
     call_option_chains_ = option_chain_parser(option_chain_ele, date_, "call");
     put_option_chains_ = option_chain_parser(option_chain_ele, date_, "put");
+}
+
+bool Process::init()
+{
     if (call_option_chains_.empty() || put_option_chains_.empty()) {
         fmt::print("{} call or put option chains empty. call: {}, put:{}\n",
                    date_, call_option_chains_.size(), put_option_chains_.size());
-        delete this;
+        return false;
     }
 
     if (call_option_chains_.size() != put_option_chains_.size()) {
         fmt::print("{} call option chains size not equal put. call:{}, put:{}",
                    date_, call_option_chains_.size(), put_option_chains_.size());
-        delete this;
+        return false;
     }
 
     // 获取行情
-    fetch_option_quote(year_, date_, call_option_chains_, call_option_quote_);
-    fetch_option_quote(year_, date_, put_option_chains_, put_option_quote_);
+    fetch_option_quote(call_option_chains_, call_option_quote_);
+    fetch_option_quote(put_option_chains_, put_option_quote_);
 
     if (call_option_quote_.empty() || put_option_quote_.empty()) {
         fmt::print("{} call or put quote empty. call option:{}, put quote:{}\n",
                    date_, call_option_quote_.size(), put_option_quote_.size());
-        delete this;
+        return false;
     }
 
     check_schema();
     option_count_ = (int) call_option_chains_.size();
+    return true;
+}
+
+void Process::start()
+{
+    if (init())
+        process();
 }
 
 void Process::check_schema()
@@ -235,6 +243,16 @@ void Process::process()
 
         calc_and_save(stock_close_price, merge_future_price, maturity_time, kline_time);
     }
+
+    sql_ = sql_.substr(0, sql_.size() - 1);
+    sql_ += ";";
+
+    try {
+        Sql::instance().execute_sql_command(sql_);
+    } catch (mysqlx::r0::Error& e) {
+        fmt::print("[{}] error: {}, error sql: \n{}\n", __LINE__, e.what(), sql_);
+        exit(1);
+    }
 }
 
 void Process::calc_and_save(double stock_close_price,
@@ -259,7 +277,10 @@ void Process::calc_and_save(double stock_close_price,
 
         // iv
         auto call_iv = option_iv_calc(call_option_chain, merge_future_price, maturity_time, "c");
-        auto put_iv = option_iv_calc(put_option_chain, merge_future_price, maturity_time, "c");
+        auto put_iv = option_iv_calc(put_option_chain, merge_future_price, maturity_time, "p");
+
+        assert(call_iv <= 100.0);
+        assert(put_iv <= 100.0);
 
         // 希腊字母
         auto[delta_, gamma_, theta_, vega_] = greek_alphabet_calc(call_strike_price,
@@ -293,10 +314,7 @@ void Process::calc_and_save(double stock_close_price,
                                     m_round(theta_),
                                     m_round(vega_)
         );
-        producer_ptr_->produce(cppkafka::MessageBuilder("option-data")
-                                       .partition(0)
-                                       .payload(call_sql));
-//        sql_ += call_sql;
+        sql_ += call_sql;
 
         auto put_sql = fmt::format(sql_template,
                                    date_,
@@ -322,10 +340,7 @@ void Process::calc_and_save(double stock_close_price,
                                    theta_,
                                    vega_
         );
-        producer_ptr_->produce(cppkafka::MessageBuilder("option-data")
-                                       .partition(0)
-                                       .payload(put_sql));
-//        sql_ += put_sql;
+        sql_ += put_sql;
 
         fmt::print(
                 "DATE:{}, TIME:{}, C_CODE:{}, P_CODE:{}, SPOT_PRICE:{}, CALL_IV:{}%, PUT_IV:{}%, delta:{}, gamma:{}, theta:{}, vega:{}\n",
@@ -342,15 +357,6 @@ void Process::calc_and_save(double stock_close_price,
                 vega_
         );
     }
-//    sql_ = sql_.substr(0, sql_.size() - 1);
-//    sql_ += ";";
-//
-//    try {
-//        Sql::instance().execute_sql_command(sql_);
-//    } catch (...) {
-//        fmt::print("[{}] error sql: \n{}\n", __LINE__, sql_);
-//        exit(1);
-//    }
 }
 
 std::vector<double>
@@ -515,6 +521,5 @@ Process::find_idx(std::map<int64_t, int64_t> &m, int value)
 
 Process::~Process()
 {
-    producer_ptr_->flush();
 }
 

@@ -1,9 +1,10 @@
 cmake_minimum_required(VERSION 3.19)
 project(option_process)
-include(${CMAKE_SOURCE_DIR}/conan_paths.cmake)
+include(${CMAKE_SOURCE_DIR}/conan/conan_paths.cmake)
 
 set(CMAKE_CXX_STANDARD 20)
-#set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -O1 -Wall")
+#set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -rdynamic -Wall -ltbb")
+set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -O2 -Wall")
 
 #list(APPEND CMAKE_MODULE_PATH "${CMAKE_BINARY_DIR}")
 find_package(RdKafka)
@@ -40,10 +41,11 @@ link_directories(
 add_executable(option_process main.cpp ${HEADERS} ${SOURCE})
 target_link_libraries(option_process
         mysqlcppconn8
-        RdKafka::rdkafka
-        cppkafka
+#        RdKafka::rdkafka
+#        cppkafka
         fmt
         )
-add_subdirectory(tests)
-add_subdirectory(tests/kafka)
+
+#add_subdirectory(tests)
+#add_subdirectory(tests/kafka)
 # target_link_libraries(option_process PRIVATE GTest::gtest GTest::gtest_main)
