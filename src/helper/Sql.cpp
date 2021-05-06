@@ -8,7 +8,6 @@ mysqlx::SqlResult Sql::execute_sql_command(const std::string &query)
 {
     std::lock_guard<std::mutex> guard(mutex_);
     auto result = session_.sql(query).execute();
-    session_.commit();
     return result;
 }
 

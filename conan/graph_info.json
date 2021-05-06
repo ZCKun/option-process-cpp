@@ -1,0 +1,82 @@
+{
+ "options": [
+  [
+   "gtest:build_gmock",
+   "True"
+  ],
+  [
+   "gtest:fPIC",
+   "True"
+  ],
+  [
+   "gtest:hide_symbols",
+   "False"
+  ],
+  [
+   "gtest:no_main",
+   "False"
+  ],
+  [
+   "gtest:shared",
+   "False"
+  ],
+  [
+   "librdkafka:fPIC",
+   "True"
+  ],
+  [
+   "librdkafka:lz4",
+   "deprecated"
+  ],
+  [
+   "librdkafka:plugins",
+   "False"
+  ],
+  [
+   "librdkafka:sasl",
+   "False"
+  ],
+  [
+   "librdkafka:shared",
+   "False"
+  ],
+  [
+   "librdkafka:ssl",
+   "False"
+  ],
+  [
+   "librdkafka:zlib",
+   "False"
+  ],
+  [
+   "librdkafka:zstd",
+   "False"
+  ],
+  [
+   "lz4:fPIC",
+   "True"
+  ],
+  [
+   "lz4:shared",
+   "False"
+  ],
+  [
+   "simdjson:fPIC",
+   "True"
+  ],
+  [
+   "simdjson:shared",
+   "False"
+  ],
+  [
+   "simdjson:threads",
+   "True"
+  ]
+ ],
+ "root": {
+  "name": null,
+  "version": null,
+  "user": null,
+  "channel": null
+ }
+}
